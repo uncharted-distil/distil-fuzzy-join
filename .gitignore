@@ -1,0 +1,4 @@
+.mypy_cache
+DistilFuzzyJoin.egg-info
+fuzzyjoin/__pycache__
+test/__pycache__
