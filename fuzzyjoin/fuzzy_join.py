@@ -26,12 +26,12 @@ import numpy as np
 from d3m import container, exceptions, utils as d3m_utils
 from d3m.metadata import base as metadata_base, hyperparams
 from d3m.primitive_interfaces import base, transformer
-from common_primitives import utils
 
 __all__ = ('FuzzyJoinPrimitive',)
 
 Inputs = container.Dataset
 Outputs = container.Dataset
+
 
 class Hyperparams(hyperparams.Hyperparams):
     left_col = hyperparams.Hyperparameter[str](
