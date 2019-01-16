@@ -7,8 +7,8 @@ setup(
     packages=['fuzzyjoin'],
     keywords=['d3m_primitive'],
     install_requires=[
-        'pandas == 0.22.0',
-        'frozendict==1.2',
+        'pandas >= 0.22.0',
+        'frozendict>=1.2',
         'd3m',
     ],
     dependency_links=[

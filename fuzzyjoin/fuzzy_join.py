@@ -83,9 +83,6 @@ class FuzzyJoinPrimitive(transformer.TransformerPrimitiveBase[Inputs,
                 right: Inputs,
                 timeout: float = None,
                 iterations: int = None) -> base.CallResult[Outputs]:
-
-        # wrap as a D3M container - metadata should be auto generated
-        left['0'].reset_index(drop='True')
         return base.CallResult(left)
 
     def multi_produce(self, *,
