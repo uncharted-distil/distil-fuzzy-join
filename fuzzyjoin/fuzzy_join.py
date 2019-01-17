@@ -95,3 +95,14 @@ class FuzzyJoinPrimitive(transformer.TransformerPrimitiveBase[Inputs,
                                    iterations=iterations,
                                    left=left,
                                    right=right)
+
+    def fit_multi_produce(self, *,
+                          produce_methods: typing.Sequence[str],
+                          left: Inputs, right: Inputs,
+                          timeout: float = None,
+                          iterations: int = None) -> base.MultiCallResult:  # type: ignore
+        return self._fit_multi_produce(produce_methods=produce_methods,
+                                       timeout=timeout,
+                                       iterations=iterations,
+                                       left=left,
+                                       right=right)
