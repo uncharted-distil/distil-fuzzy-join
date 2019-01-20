@@ -26,6 +26,7 @@ import numpy as np
 from d3m import container, exceptions, utils as d3m_utils
 from d3m.metadata import base as metadata_base, hyperparams
 from d3m.primitive_interfaces import base, transformer
+from common_primitives import utils
 
 __all__ = ('FuzzyJoinPrimitive',)
 
@@ -79,15 +80,48 @@ class FuzzyJoinPrimitive(transformer.TransformerPrimitiveBase[Inputs,
     )
 
     def produce(self, *,
-                left: Inputs,
-                right: Inputs,
+                left: Inputs,  # type: ignore
+                right: Inputs,  # type: ignore
                 timeout: float = None,
                 iterations: int = None) -> base.CallResult[Outputs]:
-        return base.CallResult(left)
+
+        # attempt to extract the main table
+        try:
+            left_resource_id, left_df = utils.get_tabular_resource(left, None)
+        except ValueError as error:
+            raise exceptions.InvalidArgumentValueError("Failure to find tabular resource in left dataset") from error
+
+        try:
+            right_resource_id, right_df = utils.get_tabular_resource(right, None)
+        except ValueError as error:
+            raise exceptions.InvalidArgumentValueError("Failure to find tabular resource in right dataset") from error
+
+        # left inner join on the requested columns - d3mIndex is taken from the left dataset if it exists
+        left_df = left_df.set_index(self.hyperparams['left_col'])
+        right_df = right_df.set_index(self.hyperparams['right_col']).drop(columns='d3mIndex')
+        joined = container.DataFrame(left_df.join(right_df, lsuffix='_1', rsuffix='_2', how='left'))
+
+        # sort on the d3m index if there, otherwise use the joined column
+        if 'd3mIndex' in joined:
+            joined = joined.sort_values(by=['d3mIndex'])
+        else:
+            joined = joined.sort_values(by=[self.hyperparams['left_col']])
+        joined = joined.reset_index()
+
+        # create a new dataset to hold the joined data
+        resource_map = {}
+        for resource_id, resource in left.items():
+            if resource_id == left_resource_id:
+                resource_map[resource_id] = joined
+            else:
+                resource_map[resource_id] = resource
+        result_dataset = container.Dataset(resource_map)
+
+        return base.CallResult(result_dataset)
 
     def multi_produce(self, *,
                       produce_methods: typing.Sequence[str],
-                      left: Inputs, right: Inputs,
+                      left: Inputs, right: Inputs,  # type: ignore
                       timeout: float = None,
                       iterations: int = None) -> base.MultiCallResult:  # type: ignore
         return self._multi_produce(produce_methods=produce_methods,
@@ -98,7 +132,7 @@ class FuzzyJoinPrimitive(transformer.TransformerPrimitiveBase[Inputs,
 
     def fit_multi_produce(self, *,
                           produce_methods: typing.Sequence[str],
-                          left: Inputs, right: Inputs,
+                          left: Inputs, right: Inputs,  # type: ignore
                           timeout: float = None,
                           iterations: int = None) -> base.MultiCallResult:  # type: ignore
         return self._fit_multi_produce(produce_methods=produce_methods,
