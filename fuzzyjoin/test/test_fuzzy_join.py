@@ -31,7 +31,7 @@ class FuzzyJoinPrimitiveTestCase(unittest.TestCase):
     _dataset_path_1 = path.abspath(path.join(path.dirname(__file__), 'dataset_1'))
     _dataset_path_2 = path.abspath(path.join(path.dirname(__file__), 'dataset_2'))
 
-    def test_discrete_target(self) -> None:
+    def test_string_join(self) -> None:
         dataframe_1 = self._load_data(self._dataset_path_1)
         dataframe_2 = self._load_data(self._dataset_path_2)
 
@@ -41,7 +41,8 @@ class FuzzyJoinPrimitiveTestCase(unittest.TestCase):
         hyperparams = hyperparams_class.defaults().replace(
             {
                 'left_col': 'alpha',
-                'right_col': 'alpha'
+                'right_col': 'alpha',
+                'accuracy': 0.9,
             }
         )
         fuzzy_join = FuzzyJoin(hyperparams=hyperparams)
@@ -49,15 +50,13 @@ class FuzzyJoinPrimitiveTestCase(unittest.TestCase):
         result_dataframe = result_dataset['0']
 
         # verify the output
-        self.assertListEqual(list(result_dataframe), ['alpha', 'd3mIndex', 'bravo', 'charlie'])
-        self.assertListEqual(list(result_dataframe['d3mIndex']), list(range(1, 9)))
+        self.assertListEqual(list(result_dataframe), ['d3mIndex', 'alpha', 'bravo', 'charlie'])
+        self.assertListEqual(list(result_dataframe['d3mIndex']), [1, 2, 3, 4, 5, 7, 8])
         self.assertListEqual(list(result_dataframe['alpha']),
-                             ['yankee', 'yankee', 'yankee', 'hotel', 'hotel', 'hotel', 'foxtrot', 'foxtrot'])
-        self.assertListEqual(list(result_dataframe['bravo']), [float(x) for x in range(1, 9)])
+                             ['yankee', 'yankeee', 'yank', 'Hotel', 'hotel', 'foxtrot aa', 'foxtrot'])
+        self.assertListEqual(list(result_dataframe['bravo']), [1.0, 2.0, 3.0, 4.0, 5.0, 7.0, 8.0])
         self.assertListEqual(list(result_dataframe['charlie']),
-                             [100.0, 100.0, 100.0, 200.0, 200.0, 200.0, 300.0, 300.0])
-
-        #self.assertListEqual(list(result_dataframe['charlie']),
+                             [100.0, 100.0, 100.0, 200.0, 200.0, 300.0, 300.0])
 
     def _load_data(cls, dataset_path: str) -> container.DataFrame:
         dataset_doc_path = path.join(dataset_path, 'datasetDoc.json')

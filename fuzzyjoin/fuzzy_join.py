@@ -27,6 +27,7 @@ from d3m import container, exceptions, utils as d3m_utils
 from d3m.metadata import base as metadata_base, hyperparams
 from d3m.primitive_interfaces import base, transformer
 from common_primitives import utils
+from fuzzywuzzy import fuzz, process
 
 __all__ = ('FuzzyJoinPrimitive',)
 
@@ -44,6 +45,11 @@ class Hyperparams(hyperparams.Hyperparams):
         default="",
         semantic_types=['https://metadata.datadrivendiscovery.org/types/ControlParameter'],
         description='Name of right join column.'
+    )
+    accuracy = hyperparams.Hyperparameter[float](
+        default=0.0,
+        semantic_types=['https://metadata.datadrivendiscovery.org/types/ControlParameter'],
+        description='Requierd accuracy of join ranging from 0.0 to 1.0, where 1.0 is an exact match.'
     )
 
 
@@ -96,21 +102,36 @@ class FuzzyJoinPrimitive(transformer.TransformerPrimitiveBase[Inputs,
         except ValueError as error:
             raise exceptions.InvalidArgumentValueError("Failure to find tabular resource in right dataset") from error
 
-        # left inner join on the requested columns - d3mIndex is taken from the left dataset if it exists
-        left_df = left_df.set_index(self.hyperparams['left_col'])
-        right_df = right_df.set_index(self.hyperparams['right_col']).drop(columns='d3mIndex')
-        joined = container.DataFrame(left_df.join(right_df, lsuffix='_1', rsuffix='_2', how='left'))
+        accuracy = self.hyperparams['accuracy'] * 100
+        if accuracy <= 0 or accuracy > 100:
+            raise exceptions.InvalidArgumentValueError("accuracy of " + str(self.hyperparams['accuracy']) +
+                                                       " is out of range") from error
+
+        # use d3mIndex from left col if present
+        right_df = right_df.drop(columns='d3mIndex')
+
+        # fuzzy match each of the left join col against the right join col value and save the results as the left
+        # dataframe index
+        choices = right_df[self.hyperparams['right_col']].unique()
+        left_df.index = left_df[self.hyperparams['left_col']]. \
+            map(lambda x: self._string_fuzzy_match(x, choices, accuracy))
+
+        # make the right col the right dataframe index
+        right_df = right_df.set_index(self.hyperparams['right_col'])
+
+        # inner join on the left / right indices
+        joined = container.DataFrame(left_df.join(right_df, lsuffix='_1', rsuffix='_2', how='inner'))
 
         # sort on the d3m index if there, otherwise use the joined column
         if 'd3mIndex' in joined:
             joined = joined.sort_values(by=['d3mIndex'])
         else:
             joined = joined.sort_values(by=[self.hyperparams['left_col']])
-        joined = joined.reset_index()
+        joined = joined.reset_index(drop=True)
 
         # create a new dataset to hold the joined data
         resource_map = {}
-        for resource_id, resource in left.items():
+        for resource_id, resource in left.items():  # type: ignore
             if resource_id == left_resource_id:
                 resource_map[resource_id] = joined
             else:
@@ -140,3 +161,14 @@ class FuzzyJoinPrimitive(transformer.TransformerPrimitiveBase[Inputs,
                                        iterations=iterations,
                                        left=left,
                                        right=right)
+
+    @classmethod
+    def _string_fuzzy_match(cls,
+                            match: typing.Any,
+                            choices: typing.Sequence[typing.Any],
+                            min_score: float) -> typing.Optional[str]:
+        choice, score = process.extractOne(match, choices)
+        val = None
+        if score >= min_score:
+            val = choice
+        return val
