@@ -41,6 +41,14 @@
           "role": [
             "attribute"
           ]
+        },
+        {
+          "colIndex": 3,
+          "colName": "whiskey",
+          "colType": "real",
+          "role": [
+            "attribute"
+          ]
         }
       ]
     }

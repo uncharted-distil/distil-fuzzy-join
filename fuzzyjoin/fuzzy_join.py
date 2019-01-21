@@ -60,6 +60,14 @@ class FuzzyJoinPrimitive(transformer.TransformerPrimitiveBase[Inputs,
     Place holder fuzzy join primitive
     """
 
+    _STRING_JOIN_TYPES = set(('https://metadata.datadrivendiscovery.org/types/CategoricalData',
+                              'http://schema.org/Text',
+                              'http://schema.org/Boolean'))
+
+    _NUMERIC_JOIN_TYPES = set(('http://schema.org/Integer', 'http://schema.org/Float'))
+
+    _SUPPORTED_TYPES = _STRING_JOIN_TYPES.union(_NUMERIC_JOIN_TYPES)
+
     __author__ = 'Uncharted Software',
     metadata = metadata_base.PrimitiveMetadata(
         {
@@ -102,32 +110,22 @@ class FuzzyJoinPrimitive(transformer.TransformerPrimitiveBase[Inputs,
         except ValueError as error:
             raise exceptions.InvalidArgumentValueError("Failure to find tabular resource in right dataset") from error
 
-        accuracy = self.hyperparams['accuracy'] * 100
-        if accuracy <= 0 or accuracy > 100:
-            raise exceptions.InvalidArgumentValueError("accuracy of " + str(self.hyperparams['accuracy']) +
-                                                       " is out of range") from error
+        accuracy = self.hyperparams['accuracy']
+        if accuracy <= 0.0 or accuracy > 1.0:
+            raise exceptions.InvalidArgumentValueError('accuracy of ' + str(accuracy) + ' is out of range')
 
-        # use d3mIndex from left col if present
-        right_df = right_df.drop(columns='d3mIndex')
+        left_col = self.hyperparams['left_col']
+        right_col = self.hyperparams['right_col']
 
-        # fuzzy match each of the left join col against the right join col value and save the results as the left
-        # dataframe index
-        choices = right_df[self.hyperparams['right_col']].unique()
-        left_df.index = left_df[self.hyperparams['left_col']]. \
-            map(lambda x: self._string_fuzzy_match(x, choices, accuracy))
-
-        # make the right col the right dataframe index
-        right_df = right_df.set_index(self.hyperparams['right_col'])
-
-        # inner join on the left / right indices
-        joined = container.DataFrame(left_df.join(right_df, lsuffix='_1', rsuffix='_2', how='inner'))
-
-        # sort on the d3m index if there, otherwise use the joined column
-        if 'd3mIndex' in joined:
-            joined = joined.sort_values(by=['d3mIndex'])
+        # perform join based on semantic type
+        join_type = self._get_join_semantic_type(left, left_resource_id, left_col, right, right_resource_id, right_col)
+        joined: pd.Dataframe = None
+        if join_type in self._STRING_JOIN_TYPES:
+            joined = self._join_string_col(left_df, left_col, right_df, right_col, accuracy)
+        elif join_type in self._NUMERIC_JOIN_TYPES:
+            joined = self._join_numeric_col(left_df, left_col, right_df, right_col, accuracy)
         else:
-            joined = joined.sort_values(by=[self.hyperparams['left_col']])
-        joined = joined.reset_index(drop=True)
+            raise exceptions.InvalidArgumentValueError('join not surpported on type ' + str(join_type))
 
         # create a new dataset to hold the joined data
         resource_map = {}
@@ -163,6 +161,33 @@ class FuzzyJoinPrimitive(transformer.TransformerPrimitiveBase[Inputs,
                                        right=right)
 
     @classmethod
+    def _get_join_semantic_type(cls,
+                                left: container.Dataset,
+                                left_resource_id: str,
+                                left_col: str,
+                                right: container.Dataset,
+                                right_resource_id: str,
+                                right_col: str) -> typing.Optional[str]:
+        # find a common semantic type and use that as the join type
+        left_types = cls._get_column_semantic_type(left, left_resource_id, left_col)
+        right_types = cls._get_column_semantic_type(right, right_resource_id, right_col)
+        join_types = list(left_types.intersection(right_types).intersection(cls._SUPPORTED_TYPES))
+        if len(join_types) > 0:
+            return join_types[0]
+        return None
+
+    @classmethod
+    def _get_column_semantic_type(cls,
+                                  dataset: container.Dataset,
+                                  resource_id: str,
+                                  col_name: str) -> typing.Set[str]:
+        for col_idx in range(dataset.metadata.query((resource_id, metadata_base.ALL_ELEMENTS))['dimension']['length']):
+            col_metadata = dataset.metadata.query((resource_id, metadata_base.ALL_ELEMENTS, col_idx))
+            if col_metadata.get('name', None) == col_name:
+                return set(col_metadata.get('semantic_types', ()))
+        return set()
+
+    @classmethod
     def _string_fuzzy_match(cls,
                             match: typing.Any,
                             choices: typing.Sequence[typing.Any],
@@ -172,3 +197,81 @@ class FuzzyJoinPrimitive(transformer.TransformerPrimitiveBase[Inputs,
         if score >= min_score:
             val = choice
         return val
+
+    @classmethod
+    def _join_string_col(cls,
+                         left_df: container.DataFrame,
+                         left_col: str,
+                         right_df: container.DataFrame,
+                         right_col: str,
+                         accuracy: float) -> pd.DataFrame:
+        # use d3mIndex from left col if present
+        right_df = right_df.drop(columns='d3mIndex')
+
+        # fuzzy match each of the left join col against the right join col value and save the results as the left
+        # dataframe index
+        choices = right_df[right_col].unique()
+        left_df.index = left_df[left_col]. \
+            map(lambda x: cls._string_fuzzy_match(x, choices, accuracy*100))
+
+        # make the right col the right dataframe index
+        right_df = right_df.set_index(right_col)
+
+        # inner join on the left / right indices
+        joined = container.DataFrame(left_df.join(right_df, lsuffix='_1', rsuffix='_2', how='inner'))
+
+        # sort on the d3m index if there, otherwise use the joined column
+        if 'd3mIndex' in joined:
+            joined = joined.sort_values(by=['d3mIndex'])
+        else:
+            joined = joined.sort_values(by=[left_col])
+        joined = joined.reset_index(drop=True)
+
+        return joined
+
+    @classmethod
+    def _numeric_fuzzy_match(cls,
+                             match: float,
+                             choices: typing.Sequence[typing.Any],
+                             accuracy: float) -> typing.Optional[float]:
+        # not sure if this is faster than applying a lambda against the sequence - probably is
+        inv_accuracy = 1.0 - accuracy
+        min_diff = float("inf")
+        min_val = None
+        for i, x in enumerate(choices):
+            d = float(match) * inv_accuracy
+            if x > match - d and x < match + d and d < min_diff:
+                min_diff = d
+                min_val = x
+        return min_val
+
+    @classmethod
+    def _join_numeric_col(cls,
+                          left_df: container.DataFrame,
+                          left_col: str,
+                          right_df: container.DataFrame,
+                          right_col: str,
+                          accuracy: float) -> pd.DataFrame:
+        # use d3mIndex from left col if present
+        right_df = right_df.drop(columns='d3mIndex')
+
+        # fuzzy match each of the left join col against the right join col value and save the results as the left
+        # dataframe index
+        choices = right_df[right_col].unique()
+        left_df.index = left_df[left_col]. \
+            map(lambda x: cls._numeric_fuzzy_match(x, choices, accuracy))
+
+        # make the right col the right dataframe index
+        right_df = right_df.set_index(right_col)
+
+        # inner join on the left / right indices
+        joined = container.DataFrame(left_df.join(right_df, lsuffix='_1', rsuffix='_2', how='inner'))
+
+        # sort on the d3m index if there, otherwise use the joined column
+        if 'd3mIndex' in joined:
+            joined = joined.sort_values(by=['d3mIndex'])
+        else:
+            joined = joined.sort_values(by=[left_col])
+        joined = joined.reset_index(drop=True)
+
+        return joined
