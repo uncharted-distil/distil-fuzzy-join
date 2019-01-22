@@ -18,16 +18,19 @@ import typing
 import os
 import csv
 import collections
+import sys
 
 import frozendict  # type: ignore
 import pandas as pd  # type: ignore
 import numpy as np
+import math
 
 from d3m import container, exceptions, utils as d3m_utils
 from d3m.metadata import base as metadata_base, hyperparams
 from d3m.primitive_interfaces import base, transformer
 from common_primitives import utils
 from fuzzywuzzy import fuzz, process
+from dateutil import parser
 
 __all__ = ('FuzzyJoinPrimitive',)
 
@@ -66,7 +69,9 @@ class FuzzyJoinPrimitive(transformer.TransformerPrimitiveBase[Inputs,
 
     _NUMERIC_JOIN_TYPES = set(('http://schema.org/Integer', 'http://schema.org/Float'))
 
-    _SUPPORTED_TYPES = _STRING_JOIN_TYPES.union(_NUMERIC_JOIN_TYPES)
+    _DATETIME_JOIN_TYPES = set(('http://schema.org/DateTime',))
+
+    _SUPPORTED_TYPES = _STRING_JOIN_TYPES.union(_NUMERIC_JOIN_TYPES).union(_DATETIME_JOIN_TYPES)
 
     __author__ = 'Uncharted Software',
     metadata = metadata_base.PrimitiveMetadata(
@@ -124,6 +129,8 @@ class FuzzyJoinPrimitive(transformer.TransformerPrimitiveBase[Inputs,
             joined = self._join_string_col(left_df, left_col, right_df, right_col, accuracy)
         elif join_type in self._NUMERIC_JOIN_TYPES:
             joined = self._join_numeric_col(left_df, left_col, right_df, right_col, accuracy)
+        elif join_type in self._DATETIME_JOIN_TYPES:
+            joined = self._join_datetime_col(left_df, left_col, right_df, right_col, accuracy)
         else:
             raise exceptions.InvalidArgumentValueError('join not surpported on type ' + str(join_type))
 
@@ -236,13 +243,14 @@ class FuzzyJoinPrimitive(transformer.TransformerPrimitiveBase[Inputs,
                              accuracy: float) -> typing.Optional[float]:
         # not sure if this is faster than applying a lambda against the sequence - probably is
         inv_accuracy = 1.0 - accuracy
-        min_diff = float("inf")
+        min_distance = float("inf")
         min_val = None
-        for i, x in enumerate(choices):
-            d = float(match) * inv_accuracy
-            if x > match - d and x < match + d and d < min_diff:
-                min_diff = d
-                min_val = x
+        tolerance = float(match) * inv_accuracy
+        for i, num in enumerate(choices):
+            distance = abs(match - num)
+            if distance <= tolerance and distance <= min_distance:
+                min_diff = distance
+                min_val = num
         return min_val
 
     @classmethod
@@ -275,3 +283,52 @@ class FuzzyJoinPrimitive(transformer.TransformerPrimitiveBase[Inputs,
         joined = joined.reset_index(drop=True)
 
         return joined
+
+    @classmethod
+    def _join_datetime_col(cls,
+                           left_df: container.DataFrame,
+                           left_col: str,
+                           right_df: container.DataFrame,
+                           right_col: str,
+                           accuracy: float) -> pd.DataFrame:
+        # use d3mIndex from left col if present
+        right_df = right_df.drop(columns='d3mIndex')
+
+        choices = np.array([np.datetime64(parser.parse(dt)) for dt in right_df[right_col].unique()])
+        left_keys = np.array([np.datetime64(parser.parse(dt)) for dt in left_df[left_col].values])
+        left_df.index = np.array([cls._datetime_fuzzy_match(dt, choices, accuracy) for dt in left_keys])
+
+        # make the right col the right dataframe index
+        right_df = right_df.set_index(right_col)
+
+        # inner join on the left / right indices
+        joined = container.DataFrame(left_df.join(right_df, lsuffix='_1', rsuffix='_2', how='inner'))
+
+        print(joined)
+
+        # sort on the d3m index if there, otherwise use the joined column
+        if 'd3mIndex' in joined:
+            joined = joined.sort_values(by=['d3mIndex'])
+        else:
+            joined = joined.sort_values(by=[left_col])
+        joined = joined.reset_index(drop=True)
+
+    @classmethod
+    def _datetime_fuzzy_match(cls,
+                              match: np.datetime64,
+                              choices: typing.Sequence[np.datetime64],
+                              accuracy: float) -> typing.Optional[np.datetime64]:
+        tolerance = np.timedelta64(int(31536000 * math.log((1.0 - accuracy)*10)), 's')
+        print(math.log((1.0-accuracy)*10))
+
+        min_distance = None
+        min_date = None
+        for i, date in enumerate(choices):
+            distance = abs(match - date)
+            print("dist: " + str(distance) + " tolerance: " + str(tolerance))
+            print(distance <= tolerance)
+            if distance <= tolerance and (min_distance is None or distance < min_distance):
+                min_distance = distance
+                min_date = date
+        return min_date
+

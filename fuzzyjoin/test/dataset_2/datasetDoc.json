@@ -49,6 +49,14 @@
           "role": [
             "attribute"
           ]
+        },
+        {
+          "colIndex": 4,
+          "colName": "tango",
+          "colType": "dateTime",
+          "role": [
+            "attribute"
+          ]
         }
       ]
     }

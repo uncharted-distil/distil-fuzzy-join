@@ -58,7 +58,33 @@ class FuzzyJoinPrimitiveTestCase(unittest.TestCase):
     #     self.assertListEqual(list(result_dataframe['charlie']),
     #                          [100.0, 100.0, 100.0, 200.0, 200.0, 300.0, 300.0])
 
-    def test_numeric_join(self) -> None:
+    # def test_numeric_join(self) -> None:
+    #     dataframe_1 = self._load_data(self._dataset_path_1)
+    #     dataframe_2 = self._load_data(self._dataset_path_2)
+
+    #     hyperparams_class = \
+    #         FuzzyJoin.metadata.query()['primitive_code']['class_type_arguments']['Hyperparams']
+    #     hyperparams = hyperparams_class.defaults()
+    #     hyperparams = hyperparams_class.defaults().replace(
+    #         {
+    #             'left_col': 'whiskey',
+    #             'right_col': 'xray',
+    #             'accuracy': 0.9,
+    #         }
+    #     )
+    #     fuzzy_join = FuzzyJoin(hyperparams=hyperparams)
+    #     result_dataset = fuzzy_join.produce(left=dataframe_1, right=dataframe_2).value
+    #     result_dataframe = result_dataset['0']
+
+    #     # verify the output
+    #     self.assertListEqual(list(result_dataframe), ['d3mIndex', 'alpha_1', 'bravo', 'whiskey', 'alpha_2', 'charlie'])
+    #     self.assertListEqual(list(result_dataframe['d3mIndex']), [1, 2, 3, 4])
+    #     self.assertListEqual(list(result_dataframe['alpha_1']), ['yankee', 'yankeee', 'yank', 'Hotel'])
+    #     self.assertListEqual(list(result_dataframe['alpha_2']), ['hotel', 'hotel', 'hotel', 'hotel'])
+    #     self.assertListEqual(list(result_dataframe['whiskey']), [10.0, 10.0, 10.0, 10.0])
+    #     self.assertListEqual(list(result_dataframe['charlie']), [200.0, 200.0, 200.0, 200.0])
+
+    def test_date_join(self) -> None:
         dataframe_1 = self._load_data(self._dataset_path_1)
         dataframe_2 = self._load_data(self._dataset_path_2)
 
@@ -67,9 +93,9 @@ class FuzzyJoinPrimitiveTestCase(unittest.TestCase):
         hyperparams = hyperparams_class.defaults()
         hyperparams = hyperparams_class.defaults().replace(
             {
-                'left_col': 'whiskey',
-                'right_col': 'xray',
-                'accuracy': 0.9,
+                'left_col': 'sierra',
+                'right_col': 'tango',
+                'accuracy': 0.1,
             }
         )
         fuzzy_join = FuzzyJoin(hyperparams=hyperparams)
@@ -77,10 +103,12 @@ class FuzzyJoinPrimitiveTestCase(unittest.TestCase):
         result_dataframe = result_dataset['0']
 
         # verify the output
-        self.assertListEqual(list(result_dataframe), ['d3mIndex', 'alpha_1', 'bravo', 'whiskey', 'alpha_2', 'charlie'])
-        self.assertListEqual(list(result_dataframe['d3mIndex']), [1, 2, 3, 4])
-        self.assertListEqual(list(result_dataframe['alpha_1']), ['yankee', 'yankeee', 'yank', 'Hotel'])
-        self.assertListEqual(list(result_dataframe['alpha_2']), ['hotel', 'hotel', 'hotel', 'hotel'])
+        self.assertListEqual(list(result_dataframe), ['d3mIndex', 'alpha_1', 'bravo', 'whiskey', 'sierra',
+                                                      'alpha_2', 'charlie', 'xray'])
+        self.assertListEqual(list(result_dataframe['d3mIndex']), [1, 2, 3, 4, 5, 6])
+        self.assertListEqual(list(result_dataframe['alpha_1']), ['yankee', 'yankeee', 'yank',
+                                                                 'Hotel', 'hotel', 'otel'])
+        self.assertListEqual(list(result_dataframe['alpha_2']), ['yankee', 'yankee', 'yankee', 'yankee', 'hotel', 'hotel'])
         self.assertListEqual(list(result_dataframe['whiskey']), [10.0, 10.0, 10.0, 10.0])
         self.assertListEqual(list(result_dataframe['charlie']), [200.0, 200.0, 200.0, 200.0])
 
@@ -101,6 +129,8 @@ class FuzzyJoinPrimitiveTestCase(unittest.TestCase):
                                                        {'structural_type': float})
         dataframe.metadata = dataframe.metadata.update((metadata_base.ALL_ELEMENTS, 3),
                                                        {'structural_type': float})
+        dataframe.metadata = dataframe.metadata.update((metadata_base.ALL_ELEMENTS, 4),
+                                                       {'structural_type': str})
 
         # set the semantic type
         dataframe.metadata = dataframe.metadata.\
@@ -110,6 +140,8 @@ class FuzzyJoinPrimitiveTestCase(unittest.TestCase):
             add_semantic_type((metadata_base.ALL_ELEMENTS, 2), 'http://schema.org/Float')
         dataframe.metadata = dataframe.metadata.\
             add_semantic_type((metadata_base.ALL_ELEMENTS, 3), 'http://schema.org/Float')
+        dataframe.metadata = dataframe.metadata.\
+            add_semantic_type((metadata_base.ALL_ELEMENTS, 4), 'http://schema.org/DateTime')
 
         # set the roles
         for i in range(1, 2):
@@ -124,10 +156,12 @@ class FuzzyJoinPrimitiveTestCase(unittest.TestCase):
         if 'bravo' in dataframe:
             dataframe['bravo'] = dataframe['bravo'].astype(float)
             dataframe['whiskey'] = dataframe['whiskey'].astype(float)
+            dataframe['sierra'] = dataframe['sierra'].astype(str)
 
         if 'charlie' in dataframe:
             dataframe['charlie'] = dataframe['charlie'].astype(float)
             dataframe['xray'] = dataframe['xray'].astype(float)
+            dataframe['tango'] = dataframe['tango'].astype(str)
 
         dataset['0'] = dataframe
 
