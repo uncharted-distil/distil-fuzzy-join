@@ -294,17 +294,19 @@ class FuzzyJoinPrimitive(transformer.TransformerPrimitiveBase[Inputs,
         # use d3mIndex from left col if present
         right_df = right_df.drop(columns='d3mIndex')
 
+        # compute a tolerance delta for time matching based on a percentage of the minimum left/right time
+        # range
         choices = np.array([np.datetime64(parser.parse(dt)) for dt in right_df[right_col].unique()])
         left_keys = np.array([np.datetime64(parser.parse(dt)) for dt in left_df[left_col].values])
-        left_df.index = np.array([cls._datetime_fuzzy_match(dt, choices, accuracy) for dt in left_keys])
+        time_tolerance = (1.0 - accuracy) * cls._compute_time_range(left_keys, choices)
+        
+        left_df.index = np.array([cls._datetime_fuzzy_match(dt, choices, time_tolerance) for dt in left_keys])
 
         # make the right col the right dataframe index
         right_df = right_df.set_index(right_col)
 
         # inner join on the left / right indices
         joined = container.DataFrame(left_df.join(right_df, lsuffix='_1', rsuffix='_2', how='inner'))
-
-        print(joined)
 
         # sort on the d3m index if there, otherwise use the joined column
         if 'd3mIndex' in joined:
@@ -313,22 +315,32 @@ class FuzzyJoinPrimitive(transformer.TransformerPrimitiveBase[Inputs,
             joined = joined.sort_values(by=[left_col])
         joined = joined.reset_index(drop=True)
 
+        return joined
+
     @classmethod
     def _datetime_fuzzy_match(cls,
                               match: np.datetime64,
                               choices: typing.Sequence[np.datetime64],
-                              accuracy: float) -> typing.Optional[np.datetime64]:
-        tolerance = np.timedelta64(int(31536000 * math.log((1.0 - accuracy)*10)), 's')
-        print(math.log((1.0-accuracy)*10))
-
+                              tolerance: np.timedelta64) -> typing.Optional[np.datetime64]:
         min_distance = None
         min_date = None
         for i, date in enumerate(choices):
-            distance = abs(match - date)
-            print("dist: " + str(distance) + " tolerance: " + str(tolerance))
-            print(distance <= tolerance)
+            distance = abs(match - date)            
             if distance <= tolerance and (min_distance is None or distance < min_distance):
                 min_distance = distance
                 min_date = date
         return min_date
 
+    @classmethod
+    def _compute_time_range(cls,
+                            left: typing.Sequence[np.datetime64],
+                            right: typing.Sequence[np.datetime64]) -> float:
+        left_min = np.amin(left)
+        left_max = np.amax(left)
+        left_delta = left_max - left_min
+
+        right_min = np.amin(right)
+        right_max = np.amax(right)
+        right_delta = right_max - right_min
+
+        return min(left_delta, right_delta) 
