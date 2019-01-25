@@ -11,11 +11,8 @@ setup(
         'frozendict>=1.2',
         'fuzzywuzzy>=0.17.0',
         'python-Levenshtein>=0.12.0',
-        'd3m',
-    ],
-    dependency_links=[
-        'git+https://gitlab.com/datadrivendiscovery/d3m.git@devel#egg=d3m'
-    ],
+        'd3m==2019.1.21',
+        ],
     entry_points={
         'd3m.primitives': [
             'distil.FuzzyJoin = fuzzyjoin.fuzzy_join:FuzzyJoinPrimitive'
