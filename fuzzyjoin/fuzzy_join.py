@@ -175,10 +175,22 @@ class FuzzyJoinPrimitive(transformer.TransformerPrimitiveBase[Inputs,
                                 right: container.Dataset,
                                 right_resource_id: str,
                                 right_col: str) -> typing.Optional[str]:
-        # find a common semantic type and use that as the join type
+        # get semantic types for left and right cols
         left_types = cls._get_column_semantic_type(left, left_resource_id, left_col)
         right_types = cls._get_column_semantic_type(right, right_resource_id, right_col)
-        join_types = list(left_types.intersection(right_types).intersection(cls._SUPPORTED_TYPES))
+        
+        # extract supported types
+        supported_left_types = left_types.intersection(cls._SUPPORTED_TYPES)
+        supported_right_types = right_types.intersection(cls._SUPPORTED_TYPES)
+        
+        # check for exact match
+        join_types = list(supported_left_types.intersection(supported_right_types))
+        if len(join_types) == 0 and \
+            len(left_types.intersection(cls._NUMERIC_JOIN_TYPES)) > 0 and \
+            len(right_types.intersection(cls._NUMERIC_JOIN_TYPES)) > 0:
+            # no exact match, but FLOAT and INT are allowed to join
+            join_types = ['http://schema.org/Float']
+
         if len(join_types) > 0:
             return join_types[0]
         return None
@@ -189,8 +201,8 @@ class FuzzyJoinPrimitive(transformer.TransformerPrimitiveBase[Inputs,
                                   resource_id: str,
                                   col_name: str) -> typing.Set[str]:
         for col_idx in range(dataset.metadata.query((resource_id, metadata_base.ALL_ELEMENTS))['dimension']['length']):
-            col_metadata = dataset.metadata.query((resource_id, metadata_base.ALL_ELEMENTS, col_idx))
-            if col_metadata.get('name', None) == col_name:
+            col_metadata = dataset.metadata.query((resource_id, metadata_base.ALL_ELEMENTS, col_idx))            
+            if col_metadata.get('name', "") == col_name:
                 return set(col_metadata.get('semantic_types', ()))
         return set()
 
@@ -265,7 +277,9 @@ class FuzzyJoinPrimitive(transformer.TransformerPrimitiveBase[Inputs,
 
         # fuzzy match each of the left join col against the right join col value and save the results as the left
         # dataframe index
+        right_df[right_col] = pd.to_numeric(right_df[right_col])
         choices = right_df[right_col].unique()
+        left_df[left_col] = pd.to_numeric(left_df[left_col])
         left_df.index = left_df[left_col]. \
             map(lambda x: cls._numeric_fuzzy_match(x, choices, accuracy))
 
