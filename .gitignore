@@ -2,3 +2,4 @@
 DistilFuzzyJoin.egg-info
 fuzzyjoin/__pycache__
 test/__pycache__
+.vscode
