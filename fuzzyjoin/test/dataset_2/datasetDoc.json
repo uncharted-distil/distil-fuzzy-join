@@ -29,7 +29,7 @@
         {
           "colIndex": 1,
           "colName": "alpha",
-          "colType": "categorical",
+          "colType": "string",
           "role": [
             "attribute"
           ]

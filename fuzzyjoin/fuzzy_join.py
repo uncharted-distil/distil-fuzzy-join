@@ -185,11 +185,15 @@ class FuzzyJoinPrimitive(transformer.TransformerPrimitiveBase[Inputs,
         
         # check for exact match
         join_types = list(supported_left_types.intersection(supported_right_types))
-        if len(join_types) == 0 and \
-            len(left_types.intersection(cls._NUMERIC_JOIN_TYPES)) > 0 and \
-            len(right_types.intersection(cls._NUMERIC_JOIN_TYPES)) > 0:
-            # no exact match, but FLOAT and INT are allowed to join
-            join_types = ['http://schema.org/Float']
+        if len(join_types) == 0:
+            if len(left_types.intersection(cls._NUMERIC_JOIN_TYPES)) > 0 and \
+                len(right_types.intersection(cls._NUMERIC_JOIN_TYPES)) > 0:
+                # no exact match, but FLOAT and INT are allowed to join
+                join_types = ['http://schema.org/Float']
+            elif len(left_types.intersection(cls._STRING_JOIN_TYPES)) > 0 and \
+                len(right_types.intersection(cls._STRING_JOIN_TYPES)) > 0:
+                # no exact match, but any text-based type is allowed to join
+                join_types = ['http://schema.org/Text']
 
         if len(join_types) > 0:
             return join_types[0]
