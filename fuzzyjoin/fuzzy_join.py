@@ -231,11 +231,15 @@ class FuzzyJoinPrimitive(transformer.TransformerPrimitiveBase[Inputs,
         # use d3mIndex from left col if present
         right_df = right_df.drop(columns='d3mIndex')
 
-        # fuzzy match each of the left join col against the right join col value and save the results as the left
-        # dataframe index
-        choices = right_df[right_col].unique()
-        left_df.index = left_df[left_col]. \
-            map(lambda x: cls._string_fuzzy_match(x, choices, accuracy*100))
+        # pre-compute fuzzy matches
+        left_keys = left_df[left_col].unique()
+        right_keys = right_df[right_col].unique()
+        matches: typing.Dict[str, typing.Optional[str]] = {}
+        for left_key in left_keys:
+            matches[left_key] = cls._string_fuzzy_match(left_key, right_keys, accuracy*100)
+
+        # look up pre-computed fuzzy match for each element in the left column
+        left_df.index = left_df[left_col].map(lambda key: matches[key])
 
         # make the right col the right dataframe index
         right_df = right_df.set_index(right_col)
