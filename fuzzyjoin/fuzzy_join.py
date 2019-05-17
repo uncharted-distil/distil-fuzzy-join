@@ -26,9 +26,9 @@ import numpy as np
 import math
 
 from d3m import container, exceptions, utils as d3m_utils
+from d3m.base import utils as d3m_base_utils
 from d3m.metadata import base as metadata_base, hyperparams
 from d3m.primitive_interfaces import base, transformer
-from common_primitives import utils
 from fuzzywuzzy import fuzz, process
 from dateutil import parser
 
@@ -79,11 +79,12 @@ class FuzzyJoinPrimitive(transformer.TransformerPrimitiveBase[Inputs,
             'id': '6c3188bf-322d-4f9b-bb91-68151bf1f17f',
             'version': '0.1.0',
             'name': 'Fuzzy Join Placeholder',
-            'python_path': 'd3m.primitives.distil.FuzzyJoin',
+            'python_path': 'd3m.primitives.data_transformation.fuzzy_join.DistilFuzzyJoin',
             'keywords': ['join', 'columns', 'dataframe'],
             'source': {
                 'name': 'Uncharted Software',
-                'contact': 'mailto:cbethune@uncharted.software'
+                'contact': 'mailto:cbethune@uncharted.software',
+                'uris': ['git+https://github.com/uncharted-distil/distil-fuzzy-join']
             },
             'installation': [{
                 'type': metadata_base.PrimitiveInstallationType.PIP,
@@ -106,12 +107,12 @@ class FuzzyJoinPrimitive(transformer.TransformerPrimitiveBase[Inputs,
 
         # attempt to extract the main table
         try:
-            left_resource_id, left_df = utils.get_tabular_resource(left, None)
+            left_resource_id, left_df = d3m_base_utils.get_tabular_resource(left, None)
         except ValueError as error:
             raise exceptions.InvalidArgumentValueError("Failure to find tabular resource in left dataset") from error
 
         try:
-            right_resource_id, right_df = utils.get_tabular_resource(right, None)
+            right_resource_id, right_df = d3m_base_utils.get_tabular_resource(right, None)
         except ValueError as error:
             raise exceptions.InvalidArgumentValueError("Failure to find tabular resource in right dataset") from error
 
@@ -178,11 +179,11 @@ class FuzzyJoinPrimitive(transformer.TransformerPrimitiveBase[Inputs,
         # get semantic types for left and right cols
         left_types = cls._get_column_semantic_type(left, left_resource_id, left_col)
         right_types = cls._get_column_semantic_type(right, right_resource_id, right_col)
-        
+
         # extract supported types
         supported_left_types = left_types.intersection(cls._SUPPORTED_TYPES)
         supported_right_types = right_types.intersection(cls._SUPPORTED_TYPES)
-        
+
         # check for exact match
         join_types = list(supported_left_types.intersection(supported_right_types))
         if len(join_types) == 0:
@@ -205,7 +206,7 @@ class FuzzyJoinPrimitive(transformer.TransformerPrimitiveBase[Inputs,
                                   resource_id: str,
                                   col_name: str) -> typing.Set[str]:
         for col_idx in range(dataset.metadata.query((resource_id, metadata_base.ALL_ELEMENTS))['dimension']['length']):
-            col_metadata = dataset.metadata.query((resource_id, metadata_base.ALL_ELEMENTS, col_idx))            
+            col_metadata = dataset.metadata.query((resource_id, metadata_base.ALL_ELEMENTS, col_idx))
             if col_metadata.get('name', "") == col_name:
                 return set(col_metadata.get('semantic_types', ()))
         return set()
@@ -321,7 +322,7 @@ class FuzzyJoinPrimitive(transformer.TransformerPrimitiveBase[Inputs,
         choices = np.array([np.datetime64(parser.parse(dt)) for dt in right_df[right_col].unique()])
         left_keys = np.array([np.datetime64(parser.parse(dt)) for dt in left_df[left_col].values])
         time_tolerance = (1.0 - accuracy) * cls._compute_time_range(left_keys, choices)
-        
+
         left_df.index = np.array([cls._datetime_fuzzy_match(dt, choices, time_tolerance) for dt in left_keys])
 
         # make the right col the right dataframe index
@@ -347,7 +348,7 @@ class FuzzyJoinPrimitive(transformer.TransformerPrimitiveBase[Inputs,
         min_distance = None
         min_date = None
         for i, date in enumerate(choices):
-            distance = abs(match - date)            
+            distance = abs(match - date)
             if distance <= tolerance and (min_distance is None or distance < min_distance):
                 min_distance = distance
                 min_date = date
@@ -365,4 +366,4 @@ class FuzzyJoinPrimitive(transformer.TransformerPrimitiveBase[Inputs,
         right_max = np.amax(right)
         right_delta = right_max - right_min
 
-        return min(left_delta, right_delta) 
+        return min(left_delta, right_delta)

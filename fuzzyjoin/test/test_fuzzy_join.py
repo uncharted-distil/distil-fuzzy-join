@@ -22,7 +22,7 @@ import pandas as pd
 import numpy as np
 
 from d3m import container
-from d3m.primitives.distil import FuzzyJoin
+from d3m.primitives.data_transformation.fuzzy_join import DistilFuzzyJoin as FuzzyJoin
 from d3m.metadata import base as metadata_base
 
 
@@ -50,7 +50,7 @@ class FuzzyJoinPrimitiveTestCase(unittest.TestCase):
         result_dataframe = result_dataset['0']
 
         # verify the output
-        self.assertListEqual(list(result_dataframe), ['d3mIndex', 'alpha', 'bravo', 'whiskey', 
+        self.assertListEqual(list(result_dataframe), ['d3mIndex', 'alpha', 'bravo', 'whiskey',
                                                       'sierra', 'charlie', 'xray', 'tango'])
         self.assertListEqual(list(result_dataframe['d3mIndex']), [1, 2, 3, 4, 5, 7, 8])
         self.assertListEqual(list(result_dataframe['alpha']),
@@ -120,7 +120,7 @@ class FuzzyJoinPrimitiveTestCase(unittest.TestCase):
         # load the dataset and convert resource 0 to a dataframe
         dataset = container.Dataset.load('file://{dataset_doc_path}'.format(dataset_doc_path=dataset_doc_path))
         dataframe = dataset['0']
-        dataframe.metadata = dataframe.metadata.set_for_value(dataframe)
+        dataframe.metadata = dataframe.metadata.generate(dataframe)
 
         # set the struct type
         dataframe.metadata = dataframe.metadata.update((metadata_base.ALL_ELEMENTS, 0),
