@@ -77,7 +77,7 @@ class FuzzyJoinPrimitive(transformer.TransformerPrimitiveBase[Inputs,
     metadata = metadata_base.PrimitiveMetadata(
         {
             'id': '6c3188bf-322d-4f9b-bb91-68151bf1f17f',
-            'version': '0.1.0',
+            'version': '0.22.0',
             'name': 'Fuzzy Join Placeholder',
             'python_path': 'd3m.primitives.data_transformation.fuzzy_join.DistilFuzzyJoin',
             'keywords': ['join', 'columns', 'dataframe'],
