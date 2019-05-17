@@ -142,7 +142,7 @@ class FuzzyJoinPrimitive(transformer.TransformerPrimitiveBase[Inputs,
                 resource_map[resource_id] = joined
             else:
                 resource_map[resource_id] = resource
-        result_dataset = container.Dataset(resource_map)
+        result_dataset = container.Dataset(resource_map, generate_metadata=True)
 
         return base.CallResult(result_dataset)
 
